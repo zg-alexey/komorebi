@@ -24,9 +24,33 @@ komorebi-tray.exe
 ```
 
 The existing `just build`, `just install`, and `just copy` recipes include this app.
-It runs without a console window or configuration file. Start it manually; it does
-not register itself for Windows startup or start Komorebi. Launching it a second
+It runs without a console window or configuration file. Launching it a second
 time in the same Windows session leaves the existing instance running.
+
+With a version of `komorebic` that supports `--tray`, you can manage both together:
+
+```powershell
+komorebic start --tray
+komorebic stop --tray
+komorebic kill --tray
+komorebic enable-autostart --tray
+```
+
+The flag is independent of `--bar` and can be combined with `--whkd` or `--masir`.
+`start --tray` also launches the indicator if Komorebi is already running. It looks
+for `komorebi-tray.exe` beside `komorebic.exe`, then on `PATH`. The Windows MSI
+installer includes the tray executable.
+
+`stop --tray` lets the indicator remove its icon and clean up before exiting, with
+a force-stop fallback after five seconds. `kill --tray` terminates it immediately.
+`stop --tray` also stops Komorebi. The `kill` command targets only the selected
+helper processes, so `kill --tray` leaves Komorebi running. Use the tray's **Exit**
+menu to close only the indicator gracefully. Without `--tray`, stopping Komorebi
+leaves the indicator running in its disconnected state.
+
+`enable-autostart --tray` saves the flag in the shared Komorebi startup shortcut.
+`komorebic disable-autostart` removes that shortcut. Starting the tray executable
+directly does not change autostart or launch Komorebi.
 
 Windows may initially put the icon in the tray overflow menu. Drag it into the
 visible notification area, or enable it in Windows' taskbar tray settings.

@@ -3,7 +3,7 @@
 ```
 Stop the komorebi.exe process and restore all hidden windows
 
-Usage: komorebic.exe stop [OPTIONS]
+Usage: stop [OPTIONS]
 
 Options:
       --whkd
@@ -11,6 +11,9 @@ Options:
 
       --bar
           Stop komorebi-bar if it is running as a background process
+
+      --tray
+          Stop komorebi-tray if it is running
 
       --masir
           Stop masir if it is running as a background process

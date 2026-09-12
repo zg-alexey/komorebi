@@ -3,7 +3,7 @@
 ```
 Generates the komorebi.lnk shortcut in shell:startup to autostart komorebi
 
-Usage: komorebic.exe enable-autostart [OPTIONS]
+Usage: enable-autostart [OPTIONS]
 
 Options:
   -c, --config <CONFIG>
@@ -14,6 +14,9 @@ Options:
 
       --bar
           Enable autostart of komorebi-bar
+
+      --tray
+          Enable autostart of komorebi-tray
 
       --masir
           Enable autostart of masir

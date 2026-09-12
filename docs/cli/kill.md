@@ -3,7 +3,7 @@
 ```
 Kill background processes started by komorebic
 
-Usage: komorebic.exe kill [OPTIONS]
+Usage: kill [OPTIONS]
 
 Options:
       --whkd
@@ -11,6 +11,9 @@ Options:
 
       --bar
           Kill komorebi-bar if it is running as a background process
+
+      --tray
+          Kill komorebi-tray if it is running
 
       --masir
           Kill masir if it is running as a background process
