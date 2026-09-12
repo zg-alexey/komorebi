@@ -1,5 +1,6 @@
 use crate::icon::Icon;
 use crate::state::DisplayState;
+use crate::state::IconKind;
 use crate::state::tooltip_utf16;
 use crate::subscription::Worker;
 use color_eyre::eyre::Result;
@@ -96,7 +97,7 @@ struct App {
     pending: PendingState,
     display: DisplayState,
     icon: Option<Icon>,
-    icon_label: String,
+    icon_kind: Option<IconKind>,
     added: bool,
 }
 
@@ -121,11 +122,11 @@ impl App {
 
     fn refresh(&mut self) -> Result<()> {
         let size = icon_size();
-        let label = self.display.label();
-        if self.icon.as_ref().is_none_or(|icon| icon.size != size) || self.icon_label != label {
-            let icon = Icon::render(&label, size)?;
+        let kind = self.display.icon;
+        if self.icon.as_ref().is_none_or(|icon| icon.size != size) || self.icon_kind != Some(kind) {
+            let icon = Icon::render(kind, size)?;
             self.icon = Some(icon);
-            self.icon_label = label;
+            self.icon_kind = Some(kind);
         }
         let mut data = self.icon_data();
         unsafe {
@@ -195,7 +196,7 @@ pub fn run() -> Result<()> {
         pending: pending.clone(),
         display: DisplayState::disconnected(),
         icon: None,
-        icon_label: String::new(),
+        icon_kind: None,
         added: false,
     });
     let module = unsafe { GetModuleHandleW(None)? };
@@ -333,7 +334,7 @@ unsafe extern "system" fn window_proc(
                         .icon
                         .as_ref()
                         .is_none_or(|icon| icon.size != icon_size())
-                    || app.icon_label != app.display.label()
+                    || app.icon_kind != Some(app.display.icon)
                 {
                     let _ = app.refresh();
                 }

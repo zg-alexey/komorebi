@@ -37,11 +37,15 @@ workspaces, monitor focus, or Komorebi configuration.
 ## Connection and display
 
 - Workspace numbers update from the same state notifications used by `komorebi-bar`.
+- A square crossed with an X replaces the number while Komorebi is paused. The
+  tooltip says **Paused** and retains available workspace and monitor details.
 - `—` means there is no current workspace to display. The tooltip distinguishes
   a disconnected daemon from an unavailable focused workspace.
 - If Komorebi is unavailable at launch or stops, the app stays running and retries
-  every second. After five seconds without notifications it refreshes its
-  subscription, recovering from silent daemon restarts too.
+  every second. It queries state on startup and after five seconds without
+  notifications, then refreshes its subscription when active. While paused, it
+  queries state every second because Komorebi ignores new subscriptions until
+  resumed. This also supports launching the indicator while already paused.
 - The icon is restored after Explorer restarts and rendered for the taskbar's DPI.
 - Workspace names do not replace numeric labels. Long tooltip text is truncated
   at the Windows tooltip limit without breaking Unicode characters.
@@ -54,6 +58,8 @@ cargo clippy -p komorebi-tray --all-targets -- -D warnings
 cargo test -p komorebi-tray
 ```
 
-Manual acceptance checks: change workspace and monitor focus, start the indicator
+Manual acceptance checks: pause/resume without changing workspace, launch while
+paused, stay paused for more than five seconds, change workspace and monitor
+focus, start the indicator
 before Komorebi, restart Komorebi, recreate the taskbar, open/dismiss the Exit menu,
 and verify the icon at 100%, 150%, and 200% scaling on light and dark taskbars.

@@ -11,6 +11,8 @@ struct WorkspaceNotification {
 #[derive(Deserialize)]
 struct TrayState {
     monitors: Ring<MonitorState>,
+    #[serde(default)]
+    is_paused: bool,
 }
 
 #[derive(Deserialize)]
@@ -25,23 +27,49 @@ struct WorkspaceState {
     name: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IconKind {
+    Workspace(usize),
+    Paused,
+    Unavailable,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayState {
-    pub number: Option<usize>,
+    pub icon: IconKind,
     pub tooltip: String,
 }
 
 impl DisplayState {
     pub fn disconnected() -> Self {
         Self {
-            number: None,
+            icon: IconKind::Unavailable,
             tooltip: "Komorebi: Disconnected".to_owned(),
         }
     }
 
     pub fn from_notification(bytes: &[u8]) -> serde_json::Result<Self> {
         let notification: WorkspaceNotification = serde_json::from_slice(bytes)?;
-        Ok(Self::from_monitors(&notification.state.monitors))
+        Ok(Self::from_state(notification.state))
+    }
+
+    pub fn from_snapshot(bytes: &[u8]) -> serde_json::Result<Self> {
+        Ok(Self::from_state(serde_json::from_slice(bytes)?))
+    }
+
+    fn from_state(state: TrayState) -> Self {
+        let mut display = Self::from_monitors(&state.monitors);
+        if state.is_paused {
+            display.tooltip = if matches!(display.icon, IconKind::Workspace(_)) {
+                display
+                    .tooltip
+                    .replacen("Komorebi: ", "Komorebi: Paused — ", 1)
+            } else {
+                "Komorebi: Paused".to_owned()
+            };
+            display.icon = IconKind::Paused;
+        }
+        display
     }
 
     fn from_monitors(monitors: &Ring<MonitorState>) -> Self {
@@ -52,7 +80,7 @@ impl DisplayState {
                 .map(|workspace| (monitor, workspace))
         }) else {
             return Self {
-                number: None,
+                icon: IconKind::Unavailable,
                 tooltip: "Komorebi: No focused workspace".to_owned(),
             };
         };
@@ -66,14 +94,9 @@ impl DisplayState {
             tooltip.push_str(&format!(" ({})", monitor.name));
         }
         Self {
-            number: Some(number),
+            icon: IconKind::Workspace(number),
             tooltip,
         }
-    }
-
-    pub fn label(&self) -> String {
-        self.number
-            .map_or_else(|| "—".to_owned(), |number| number.to_string())
     }
 }
 
@@ -121,10 +144,13 @@ mod tests {
         let mut monitors = Ring::default();
         monitors.elements_mut().push_back(monitor("Left", 0));
         monitors.elements_mut().push_back(monitor("Right", 11));
-        assert_eq!(DisplayState::from_monitors(&monitors).label(), "1");
+        assert_eq!(
+            DisplayState::from_monitors(&monitors).icon,
+            IconKind::Workspace(1)
+        );
         monitors.focus(1);
         let display = DisplayState::from_monitors(&monitors);
-        assert_eq!(display.label(), "12");
+        assert_eq!(display.icon, IconKind::Workspace(12));
         assert_eq!(display.tooltip, "Komorebi: Workspace 12 (Right)");
     }
 
@@ -139,19 +165,28 @@ mod tests {
         assert_eq!(left.tooltip, "Komorebi: Workspace 3 — Code (Left)");
         monitors.focus(1);
         let right = DisplayState::from_monitors(&monitors);
-        assert_eq!(left.number, right.number);
+        assert_eq!(left.icon, right.icon);
         assert_ne!(left, right);
     }
 
     #[test]
     fn invalid_selections_never_display_a_fabricated_number() {
         let mut monitors = Ring::default();
-        assert_eq!(DisplayState::from_monitors(&monitors).number, None);
+        assert_eq!(
+            DisplayState::from_monitors(&monitors).icon,
+            IconKind::Unavailable
+        );
         monitors.elements_mut().push_back(monitor("Left", 12));
-        assert_eq!(DisplayState::from_monitors(&monitors).number, None);
+        assert_eq!(
+            DisplayState::from_monitors(&monitors).icon,
+            IconKind::Unavailable
+        );
         monitors.focus(99);
-        assert_eq!(DisplayState::from_monitors(&monitors).number, None);
-        assert_eq!(DisplayState::disconnected().label(), "—");
+        assert_eq!(
+            DisplayState::from_monitors(&monitors).icon,
+            IconKind::Unavailable
+        );
+        assert_eq!(DisplayState::disconnected().icon, IconKind::Unavailable);
     }
 
     #[test]
@@ -174,7 +209,7 @@ mod tests {
             }
         }"#;
         let display = DisplayState::from_notification(bytes).unwrap();
-        assert_eq!(display.label(), "2");
+        assert_eq!(display.icon, IconKind::Workspace(2));
         assert_eq!(display.tooltip, "Komorebi: Workspace 2 — II (DISPLAY1)");
     }
 
@@ -183,6 +218,40 @@ mod tests {
         for bytes in [b"not json".as_slice(), b"{}", b"{\"state\":null}", b"\xff"] {
             assert!(DisplayState::from_notification(bytes).is_err());
         }
+    }
+
+    #[test]
+    fn pause_and_resume_replace_the_icon_without_changing_workspace() {
+        let snapshot = br#"{"is_paused":false,"monitors":{"focused":0,"elements":[{
+            "name":"Left","workspaces":{"focused":0,"elements":[{"name":"Code"}]}
+        }]}}"#;
+        let active = DisplayState::from_snapshot(snapshot).unwrap();
+        let paused_json = String::from_utf8_lossy(snapshot).replace("false", "true");
+        let paused = DisplayState::from_snapshot(paused_json.as_bytes()).unwrap();
+        let notification = format!(r#"{{"state":{paused_json}}}"#);
+        assert_eq!(
+            DisplayState::from_notification(notification.as_bytes()).unwrap(),
+            paused
+        );
+        assert_eq!(active.icon, IconKind::Workspace(1));
+        assert_eq!(paused.icon, IconKind::Paused);
+        assert_eq!(
+            paused.tooltip,
+            "Komorebi: Paused — Workspace 1 — Code (Left)"
+        );
+        assert_ne!(active, paused);
+        assert_eq!(DisplayState::from_snapshot(snapshot).unwrap(), active);
+    }
+
+    #[test]
+    fn paused_state_takes_precedence_over_missing_workspace() {
+        let snapshot = br#"{"is_paused":true,"monitors":{"focused":0,"elements":[]}}"#;
+        let display = DisplayState::from_snapshot(snapshot).unwrap();
+        assert_eq!(display.icon, IconKind::Paused);
+        assert_eq!(display.tooltip, "Komorebi: Paused");
+        let invalid = br#"{"is_paused":"yes","monitors":{"focused":0,"elements":[]}}"#;
+        assert!(DisplayState::from_snapshot(invalid).is_err());
+        assert!(DisplayState::from_snapshot(b"{}").is_err());
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use crate::state::IconKind;
 use color_eyre::eyre::Result;
 use color_eyre::eyre::ensure;
 use windows::Win32::Foundation::COLORREF;
@@ -45,7 +46,7 @@ pub struct Icon {
 }
 
 impl Icon {
-    pub fn render(label: &str, size: i32) -> Result<Self> {
+    pub fn render(kind: IconKind, size: i32) -> Result<Self> {
         ensure!((1..=256).contains(&size), "Invalid tray icon size: {size}");
         // All GDI objects are owned on this thread and selections are restored before deletion.
         unsafe {
@@ -82,7 +83,16 @@ impl Icon {
                     }
                 }
             }
-            {
+            if kind == IconKind::Paused {
+                let pixels =
+                    std::slice::from_raw_parts_mut(bits.cast::<u32>(), (size * size) as usize);
+                draw_paused(pixels, size);
+            } else {
+                let label = match kind {
+                    IconKind::Workspace(number) => number.to_string(),
+                    IconKind::Unavailable => "—".to_owned(),
+                    IconKind::Paused => unreachable!(),
+                };
                 let _selection = Selection::new(dc.0, bitmap.into())?;
                 SetBkMode(dc.0, TRANSPARENT);
                 SetTextColor(dc.0, COLORREF(0x00ffffff));
@@ -146,6 +156,22 @@ impl Icon {
                 ..Default::default()
             })?;
             Ok(Self { handle, size })
+        }
+    }
+}
+
+// Cross the existing badge from corner to corner without drawing another frame.
+fn draw_paused(pixels: &mut [u32], size: i32) {
+    let half_stroke = (size as f32 / 16.0).max(1.0) / 2.0;
+    for y in 0..size {
+        for x in 0..size {
+            let xf = x as f32;
+            let yf = y as f32;
+            let cross = (xf - yf).abs() <= half_stroke * std::f32::consts::SQRT_2
+                || (xf + yf - (size - 1) as f32).abs() <= half_stroke * std::f32::consts::SQRT_2;
+            if cross {
+                pixels[(y * size + x) as usize] = 0xffffffff;
+            }
         }
     }
 }
@@ -214,12 +240,18 @@ mod tests {
 
     #[test]
     fn renders_multiple_digits_and_scales_without_leaking_gdi_objects() {
-        drop(Icon::render("1", 16).unwrap());
+        drop(Icon::render(IconKind::Workspace(1), 16).unwrap());
         let before = unsafe { GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) };
         for _ in 0..10 {
             for size in [16, 24, 32] {
-                for label in ["1", "12", "100", "—"] {
-                    let icon = Icon::render(label, size).unwrap();
+                for kind in [
+                    IconKind::Workspace(1),
+                    IconKind::Workspace(12),
+                    IconKind::Workspace(100),
+                    IconKind::Unavailable,
+                    IconKind::Paused,
+                ] {
+                    let icon = Icon::render(kind, size).unwrap();
                     unsafe {
                         let mut info = ICONINFO::default();
                         GetIconInfo(icon.handle, &mut info).unwrap();
