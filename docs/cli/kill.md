@@ -3,7 +3,7 @@
 ```
 Kill background processes started by komorebic
 
-Usage: kill [OPTIONS]
+Usage: komorebic.exe kill [OPTIONS]
 
 Options:
       --whkd
