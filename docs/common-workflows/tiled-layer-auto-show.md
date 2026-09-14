@@ -5,7 +5,7 @@ option at the top level of `komorebi.json`:
 
 ```json
 {
-  "tiled-layer-auto-show": true
+  "tiled_layer_auto_show": true
 }
 ```
 

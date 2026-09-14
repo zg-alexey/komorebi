@@ -464,7 +464,7 @@
         }
       ]
     },
-    "tiled-layer-auto-show": {
+    "tiled_layer_auto_show": {
       "description": "Raise visible tiled windows in the current workspace when a tiled window is focused",
       "type": [
         "boolean",
